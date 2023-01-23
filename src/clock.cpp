@@ -68,6 +68,12 @@ struct Time
 
 	int totalTime = 0;
 
+private:
+	void CalcTotalTime()
+	{
+		totalTime = hours * 3600 + minutes * 60 + seconds;
+	}
+public:
 	Time() = default;
 
 	Time(int s)
@@ -96,7 +102,7 @@ struct Time
 
 	inline Time operator - (const Time& other) const
 	{
-		return Time((int)(totalTime - other.totalTime));
+		return Time(totalTime - other.totalTime);
 	}
 
 	inline Time operator + (const Time& other) const
@@ -123,6 +129,22 @@ struct Time
 		seconds = t.seconds;
 		minutes = t.minutes;
 		hours = t.hours;
+	}
+
+	inline void operator += (const Time& t) 
+	{
+		seconds   += t.seconds;
+		minutes   += t.minutes;
+		hours     += t.hours;
+		CalcTotalTime();
+	}
+
+	void Parser(std::string& sTime)
+	{
+		this->hours   = atoi(sTime.substr(0, 2).c_str());
+		this->minutes = atoi(sTime.substr(3, 2).c_str());
+		this->seconds = atoi(sTime.substr(6, 2).c_str());
+		CalcTotalTime();
 	}
 
 	void SetTime(int s)
@@ -196,6 +218,16 @@ std::string ToString(TYPE pg)
 	else                            return "";
 }
 
+TYPE ToType(std::string& s)
+{
+	s.erase(std::remove_if(s.begin(), s.end(), 
+	[]( auto const& c ) -> bool { return !std::isalnum(c); } ), s.end());
+	std::cout << s << '\n';
+	if      (s == "WORK")  return TYPE::WORK;
+	else if (s == "STUDY") return TYPE::STUDY;
+	else throw new std::exception(("No valid TYPE for '" + s + "'").c_str());
+}
+
 class Clock : public olc::PixelGameEngine
 {
 public: Clock() { sAppName = "Clock"; }
@@ -207,6 +239,7 @@ public:
 	std::vector<Time> marks;
 
 	Time totalTimeStart;
+	Time totalTimeElapsedNow;
 	Time totalTime;
 
 	Time focusTime = Time(0, 25, 0);
@@ -225,7 +258,45 @@ public:
 	olc::sound::Wave soundStartingFocus;
 	olc::sound::Wave soundStartingRest;
 
+private:
+	void VerifyTimerToday()
+	{
+		std::ifstream fMarks("marks.csv");
+		if(fMarks.is_open())
+		{
+			std::string line;
+			std::string stream;
+			while(std::getline(fMarks, stream))
+			{
+				if(stream != "") line = stream;
+			}
+			std::istringstream ss(line);
+			std::string field;
+			Time tempTotalTime;
+			int collum = 0;
+			bool hasTimerToday = false;
+			while(std::getline(ss, field, ';'))
+			{
+				if(collum == 0)
+					tempTotalTime.Parser(field);
 
+				if(collum == 2)
+				{
+					std::time_t date_finished = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+					std::string date_finished_name = std::ctime(&date_finished);
+					date_finished_name.pop_back();
+					hasTimerToday = field.substr(1, 10) == date_finished_name.substr(0, 10);
+				}
+				++collum;
+			}
+			if(hasTimerToday) 
+				totalTime = tempTotalTime;
+			std::cout << totalTime << '\n';
+		}
+		fMarks.close();
+	}
+
+public:
 	bool OnUserCreate() override
 	{
 		soundEngine.InitialiseAudio();
@@ -245,6 +316,8 @@ public:
 		std::cout << "> set [focus][rest] [time] [s][m][h]" << std::endl;
 		std::cout << "Exemple: \n";
 		std::cout << "> set rest 10 m\n";
+
+		VerifyTimerToday();
 
 		return true;
 	}
@@ -292,7 +365,8 @@ public:
 			{
 				focusStart = timer;
 				restStart = timer;
-				totalTimeStart = timer;
+				totalTimeStart      = timer;
+				totalTimeElapsedNow = timer;
 				status = STATUS::RUNNING;
 			}
 			else if(status == STATUS::PAUSED)
@@ -346,7 +420,6 @@ public:
 	{
 		OnDraw(fElapsedTime);
 		KeyboardInput();
-
 		for(int i = 0; i < marks.size() && i < 5; ++i)
 		{
 			DrawString(CenterOfScreen() + olc::vi2d(0, - radius + 100 + (20 * i)), std::to_string(i + 1) + ". " + marks[i].ToString(true) + " - " + focusTime.ToString(false), olc::CYAN, 2);
@@ -361,7 +434,9 @@ public:
 
 			Time dif = timer - progressStart;
 			timeLeft = progressTimer - dif;
-			totalTime = timer - totalTimeStart;
+			totalTime += (timer - totalTimeElapsedNow);
+
+			totalTimeElapsedNow = timer;
 			DrawString(CenterOfScreen() + olc::vi2d(0, - radius + 20), timeLeft.ToString(false) + " - " + progressStart.ToString(true), olc::YELLOW , 2);
 			DrawString(CenterOfScreen() + olc::vi2d(0, - radius + 60), totalTime.ToString(false), olc::GREEN, 2);
 
@@ -421,7 +496,7 @@ int main()
 			app.Start();
 		}
 
-		if(app.totalTime > Time(59, 24, 0))
+		// if(app.totalTime > Time(59, 24, 0))
 		{
 			csvfile csv("marks.csv");
 			if(!csv.alreadyExist)
