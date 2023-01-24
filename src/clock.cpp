@@ -356,7 +356,7 @@ public:
 			if(!soundStartingRest.LoadAudioWaveform("", (char*)t.ptr, t.size_bytes))
 				std::cout << "Error with sound\n";
 
-		// ConsoleCaptureStdOut(true);
+		ConsoleCaptureStdOut(true);
 
 		std::cout << "For changing 'FOCUS' and 'REST' time use:" << std::endl;
 		std::cout << "> set [focus][rest] [time] [s][m][h]" << std::endl;
@@ -400,11 +400,11 @@ public:
 	
 	void KeyboardInput()
 	{
+		if(!IsConsoleShowing() && GetKey(olc::ESCAPE).bPressed)
+			status = STATUS::RESET;
+
 		if(GetKey(olc::TAB).bPressed)
 			ConsoleShow(olc::Key::ESCAPE);
-
-		if(!IsConsoleShowing() && GetKey(olc::ESCAPE).bReleased)
-			status = STATUS::RESET;
 
 		if(!IsConsoleShowing() && GetKey(olc::SPACE).bReleased)
 		{
