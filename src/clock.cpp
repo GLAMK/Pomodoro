@@ -122,9 +122,30 @@ public:
 		this->SetTime();
 	}
 
+	inline void operator -= (const Time& t) 
+	{
+		totalTime -= t.totalTime;
+		this->SetTime();
+	}
+
 	inline bool operator > (const Time& other) const
 	{
 		return this->totalTime > other.totalTime;
+	}
+
+	inline bool operator < (const Time& other) const
+	{
+		return this->totalTime < other.totalTime;
+	}
+
+	inline bool operator == (const Time& other) const
+	{
+		return this->totalTime == other.totalTime;
+	}
+
+	inline bool operator != (const Time& other) const
+	{
+		return this->totalTime != other.totalTime;
 	}
 
 	inline void operator = (const Time& t) 
@@ -184,18 +205,21 @@ enum class STATUS
 	RUNNING,
 	PAUSED,
 	RESET,
+	FAILED
 };
 
 enum class PROGRESS
 {
 	FOCUS,
-	REST
+	REST,
+	FAILED
 };
 
 enum class TYPE
 {
 	STUDY,
-	WORK
+	WORK,
+	FAILED
 };
 
 std::string ToString(PROGRESS pg)
@@ -216,10 +240,9 @@ TYPE ToType(std::string& s)
 {
 	s.erase(std::remove_if(s.begin(), s.end(), 
 	[]( auto const& c ) -> bool { return !std::isalnum(c); } ), s.end());
-	std::cout << s << '\n';
 	if      (s == "WORK")  return TYPE::WORK;
 	else if (s == "STUDY") return TYPE::STUDY;
-	else throw new std::exception(("No valid TYPE for '" + s + "'").c_str());
+	else                   return TYPE::FAILED;
 }
 
 std::string CleanText(std::string s)
@@ -241,7 +264,10 @@ public:
 
 	Time totalTimeStart;
 	Time totalTimeElapsedNow;
-	Time totalTime;
+	Time totalTime = Time(0);
+
+	Time totalWorkTime  = Time(0);
+	Time totalStudyTime = Time(0);
 
 	Time focusTime = Time(0, 25, 0);
 	Time focusStart;
@@ -265,35 +291,55 @@ private:
 		std::ifstream fMarks("marks.csv");
 		if(fMarks.is_open())
 		{
-			std::string line;
 			std::string stream;
+			std::string lastStudy;
+			std::string lastWork;
+
 			while(std::getline(fMarks, stream))
 			{
-				if(stream != "" && stream != ";;;") line = stream;
-			}
-			std::istringstream ss(line);
-			std::string field;
-			Time tempTotalTime;
-			int collum = 0;
-			bool hasTimerToday = false;
-			while(std::getline(ss, field, ';'))
-			{
-				if(collum == 0)
-					tempTotalTime.Parser(field);
+				if(stream == "" || stream == ";;;") 
+					continue;
 
-				if(collum == 2)
+				std::istringstream ss(stream);
+				std::string field;
+				while(std::getline(ss, field, ';'))
 				{
-					std::time_t date_now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-					std::string date_now_name = std::ctime(&date_now);
-					date_now_name.pop_back();
-					hasTimerToday = field.substr(0, 10) == date_now_name.substr(0, 10);
+					if(ToType(field) == TYPE::WORK)
+						lastWork = ss.str();
+					if(ToType(field) == TYPE::STUDY)
+						lastStudy = ss.str();
 				}
-				++collum;
 			}
-			if(hasTimerToday) 
-				totalTime = tempTotalTime;
+			totalWorkTime = GetLastType(lastWork);
+			totalStudyTime = GetLastType(lastStudy);
+
+			totalTime = totalStudyTime + totalWorkTime;
 		}
 		fMarks.close();
+	}
+
+	Time GetLastType(const std::string& line)
+	{
+		std::istringstream ss(line);
+		std::string field;
+		Time tempTotalTime(0);
+		int collum = 0;
+		bool hasTimerToday = false;
+		while(std::getline(ss, field, ';'))
+		{
+			if(collum == 0)
+				tempTotalTime.Parser(field);
+
+			if(collum == 2)
+			{
+				std::time_t date_now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+				std::string date_now_name = std::ctime(&date_now);
+				date_now_name.pop_back();
+				hasTimerToday = field.substr(0, 10) == date_now_name.substr(0, 10);
+			}
+			++collum;
+		}
+		return hasTimerToday ? tempTotalTime : Time(0);
 	}
 
 public:
@@ -329,8 +375,6 @@ public:
 
 	bool OnDraw(float fElapsedTime)
 	{
-		timer.SetTime(time(0));
-
 		Clear(olc::Pixel(128, 64, 128, (timer.seconds % 128) + 127));
 
 		FillCircle(CenterOfScreen() - olc::vi2d(ScreenWidth()/4, 0), radius, olc::Pixel(155, 155, 155, 255));
@@ -359,14 +403,18 @@ public:
 		if(GetKey(olc::TAB).bPressed)
 			ConsoleShow(olc::Key::ESCAPE);
 
+		if(!IsConsoleShowing() && GetKey(olc::ESCAPE).bReleased)
+			status = STATUS::RESET;
+
 		if(!IsConsoleShowing() && GetKey(olc::SPACE).bReleased)
 		{
 			if(status == STATUS::RESET)
 			{
-				focusStart = timer;
-				restStart = timer;
+				focusStart          = timer;
+				restStart           = timer;
 				totalTimeStart      = timer;
 				totalTimeElapsedNow = timer;
+				timeLeft = focusTime;
 				status = STATUS::RUNNING;
 			}
 			else if(status == STATUS::PAUSED)
@@ -418,6 +466,7 @@ public:
 
 	bool OnUserUpdate(float fElapsedTime) override
 	{
+		timer.SetTime(time(0));
 		OnDraw(fElapsedTime);
 		KeyboardInput();
 		for(int i = 0; i < marks.size() && i < 5; ++i)
@@ -427,18 +476,18 @@ public:
 
 		if(status == STATUS::RUNNING)
 		{
-			Time progressTimer = progress == PROGRESS::FOCUS ? focusTime : restTime;
 			Time progressStart = progress == PROGRESS::FOCUS ? focusStart : restStart;
 
 			DrawString(CenterOfScreen() - olc::vi2d(ScreenWidth()/4 + radius - 40, radius + 40), ToString(progress) + " " + ToString(type), olc::WHITE, 4);
 
-			Time dif = timer - progressStart;
-			timeLeft = progressTimer - dif;
-			totalTime += (timer - totalTimeElapsedNow);
-
+			timeLeft      -= (timer - totalTimeElapsedNow);
+			totalTime     += (timer - totalTimeElapsedNow);
+			(type == TYPE::WORK ? totalWorkTime : totalStudyTime) += (timer - totalTimeElapsedNow);
 			totalTimeElapsedNow = timer;
+
 			DrawString(CenterOfScreen() + olc::vi2d(0, - radius + 20), timeLeft.ToString(false) + " - " + progressStart.ToString(true), olc::YELLOW , 2);
-			DrawString(CenterOfScreen() + olc::vi2d(0, - radius + 60), totalTime.ToString(false), olc::GREEN, 2);
+			DrawString(CenterOfScreen() + olc::vi2d(0, - radius + 60), (type == TYPE::WORK ? totalWorkTime : totalStudyTime).ToString(false), olc::GREEN, 2);
+			DrawString(CenterOfScreen() + olc::vi2d(175, - radius + 60), totalTime.ToString(false), olc::Pixel(255, 255, 255, 64), 2);
 
 			if(timeLeft.seconds < 0)
 			{
@@ -447,6 +496,7 @@ public:
 					marks.push_back(focusStart);
 					soundEngine.PlayWaveform(&soundStartingRest);
 					restStart = timer;
+					timeLeft = restTime;
 					progress = PROGRESS::REST;
 					status = STATUS::PAUSED;
 				}
@@ -455,6 +505,7 @@ public:
 				{
 					soundEngine.PlayWaveform(&soundStartingFocus);
 					focusStart = timer;
+					timeLeft = focusTime;
 					progress = PROGRESS::FOCUS;
 					status = STATUS::PAUSED;
 				}
@@ -463,6 +514,7 @@ public:
 
 		else
 		{
+			totalTimeElapsedNow = timer;
 			DrawString( CenterOfScreen() - olc::vi2d(ScreenWidth()/4, 40),      "P A U S E D",   olc::Pixel(255, 255, 255, 64) , 4);			
 			DrawString( CenterOfScreen() - olc::vi2d(ScreenWidth()/4 + 20, -40),"PRESS 'SPACE'", olc::Pixel(255, 255, 255, 64) , 4);			
 			DrawString(olc::vi2d(ScreenWidth() - 195, ScreenHeight() - 12), "Press 'TAB' for commands", olc::WHITE, 1);
@@ -490,28 +542,31 @@ int main()
 {
 	{
 		std::time_t date_started = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-
+		
 		Clock app;
 		if (app.Construct(700, 400, 1, 1)){
 			app.Start();
 		}
 
-		// if(app.totalTime > Time(59, 24, 0))
-		{
-			csvfile csv("marks.csv");
-			if(!csv.alreadyExist)
-				csv << "Total Time" << "Started" << "Finished" << endrow;
-			std::time_t date_finished = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-			std::string date_started_name = std::ctime(&date_started);
-			date_started_name.pop_back();
-			std::string date_finished_name = std::ctime(&date_finished);
-			date_finished_name.pop_back();
-			csv << app.totalTime;
-			csv << date_started_name;
-			csv << date_finished_name;
-			csv << ToString(app.type);
-			csv << endrow;
-		}
+		csvfile csv("marks.csv");
+		if(!csv.alreadyExist) csv << "Total Time" << "Started" << "Finished" << endrow;
+		std::time_t date_finished = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+		std::string date_started_name = std::ctime(&date_started);
+		date_started_name.pop_back();
+		std::string date_finished_name = std::ctime(&date_finished);
+		date_finished_name.pop_back();
+		
+		csv << app.totalWorkTime;
+		csv << date_started_name;
+		csv << date_finished_name;
+		csv << ToString(TYPE::WORK);
+		csv << endrow;
+	
+		csv << app.totalStudyTime;
+		csv << date_started_name;
+		csv << date_finished_name;
+		csv << ToString(TYPE::STUDY);
+		csv << endrow;
 	}
 	return 0;
 }
