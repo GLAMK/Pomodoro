@@ -56,13 +56,13 @@ public:
 
     csvfile& operator << (const char * val)
     {
-        fs_ << '"' << val << '"' << separator_;
+        fs_ << val << separator_;
         return *this;
     }
 
     csvfile& operator << (const std::string & val)
     {
-        fs_ << '"' << val << '"' << separator_;
+        fs_ << val << separator_;
         return *this;
     }
 

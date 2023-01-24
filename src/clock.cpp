@@ -73,6 +73,12 @@ private:
 	{
 		totalTime = hours * 3600 + minutes * 60 + seconds;
 	}
+	void SetTime()
+	{
+		seconds = totalTime % 60;
+		minutes = (totalTime / 60) % 60;
+		hours = ((totalTime / 3600) % 24);
+	}
 public:
 	Time() = default;
 
@@ -110,33 +116,21 @@ public:
 		return Time(totalTime + other.totalTime);
 	}
 
+	inline void operator += (const Time& t) 
+	{
+		totalTime += t.totalTime;
+		this->SetTime();
+	}
+
 	inline bool operator > (const Time& other) const
 	{
-		if(this->hours == other.hours)
-		{
-			if(this->minutes == other.minutes)
-			{
-				return this->seconds > other.seconds;
-			}
-			return this->minutes > other.minutes;
-		}
-		return this->hours > other.hours;
+		return this->totalTime > other.totalTime;
 	}
 
 	inline void operator = (const Time& t) 
 	{
 		totalTime = t.totalTime;
-		seconds = t.seconds;
-		minutes = t.minutes;
-		hours = t.hours;
-	}
-
-	inline void operator += (const Time& t) 
-	{
-		seconds   += t.seconds;
-		minutes   += t.minutes;
-		hours     += t.hours;
-		CalcTotalTime();
+		SetTime();
 	}
 
 	void Parser(std::string& sTime)
@@ -228,6 +222,13 @@ TYPE ToType(std::string& s)
 	else throw new std::exception(("No valid TYPE for '" + s + "'").c_str());
 }
 
+std::string CleanText(std::string s)
+{
+	s.erase(std::remove_if(s.begin(), s.end(), 
+	[]( auto const& c ) -> bool { return !std::isalpha(c); } ), s.end());
+	return s;
+}
+
 class Clock : public olc::PixelGameEngine
 {
 public: Clock() { sAppName = "Clock"; }
@@ -268,7 +269,7 @@ private:
 			std::string stream;
 			while(std::getline(fMarks, stream))
 			{
-				if(stream != "") line = stream;
+				if(stream != "" && stream != ";;;") line = stream;
 			}
 			std::istringstream ss(line);
 			std::string field;
@@ -282,16 +283,15 @@ private:
 
 				if(collum == 2)
 				{
-					std::time_t date_finished = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-					std::string date_finished_name = std::ctime(&date_finished);
-					date_finished_name.pop_back();
-					hasTimerToday = field.substr(1, 10) == date_finished_name.substr(0, 10);
+					std::time_t date_now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+					std::string date_now_name = std::ctime(&date_now);
+					date_now_name.pop_back();
+					hasTimerToday = field.substr(0, 10) == date_now_name.substr(0, 10);
 				}
 				++collum;
 			}
 			if(hasTimerToday) 
 				totalTime = tempTotalTime;
-			std::cout << totalTime << '\n';
 		}
 		fMarks.close();
 	}
@@ -310,7 +310,7 @@ public:
 			if(!soundStartingRest.LoadAudioWaveform("", (char*)t.ptr, t.size_bytes))
 				std::cout << "Error with sound\n";
 
-		ConsoleCaptureStdOut(true);
+		// ConsoleCaptureStdOut(true);
 
 		std::cout << "For changing 'FOCUS' and 'REST' time use:" << std::endl;
 		std::cout << "> set [focus][rest] [time] [s][m][h]" << std::endl;
