@@ -262,6 +262,8 @@ public:
 
 	std::vector<Time> marks;
 
+	bool autoContinue = true;
+
 	Time totalTimeStart;
 	Time totalTimeElapsedNow;
 	Time totalTime = Time(0);
@@ -273,6 +275,9 @@ public:
 	Time focusStart;
 	Time restTime  = Time(0, 5, 0);
 	Time restStart;
+
+	Time bigRestTime = Time(0, 15, 0);
+	int restCounter = 4;
 
 	Time timeLeft;
 	Time timer;
@@ -342,6 +347,22 @@ private:
 		return hasTimerToday ? tempTotalTime : Time(0);
 	}
 
+	void Help()
+	{
+		std::cout << "|================================================|\n";
+		std::cout << "|write 'H' or 'HELP' for command list            |\n";
+		std::cout << "|For changing 'FOCUS' and 'REST' time use:       |\n";
+		std::cout << "|> set [focus][rest] [time] [s][m][h]            |\n";
+		std::cout << "|Exemple:                                        |\n";
+		std::cout << "|> set rest 10 m                                 |\n";
+		std::cout << "|                                                |\n";
+		std::cout << "|For skip a period use: 'skip'                   |\n";
+		std::cout << "|                                                |\n";
+		std::cout << "|For turn auto continue: auto continue [on][off] |\n";
+		std::cout << "|================================================|\n";
+		std::cout << "\n";
+	}
+
 public:
 	bool OnUserCreate() override
 	{
@@ -357,12 +378,7 @@ public:
 				std::cout << "Error with sound\n";
 
 		ConsoleCaptureStdOut(true);
-
-		std::cout << "For changing 'FOCUS' and 'REST' time use:" << std::endl;
-		std::cout << "> set [focus][rest] [time] [s][m][h]" << std::endl;
-		std::cout << "Exemple: \n";
-		std::cout << "> set rest 10 m\n";
-
+		Help();
 		VerifyTimerToday();
 
 		return true;
@@ -461,6 +477,24 @@ public:
 			std::cout << "Rest Time: " << restTime << "\n";
 
 		}
+		else if(c1 == "skip")
+		{
+			timeLeft.seconds = 0;
+		}
+		else if(c1 == "auto")
+		{
+			ss >> c1;
+			if(c1 == "continue")
+			{
+				ss >> c1;
+				if(c1 == "on") autoContinue = true;
+				else if(c1 == "off") autoContinue = false;
+			}
+		}
+		else if(c1 == "h" || c1 == "help")
+		{
+			Help();
+		}
 		return true;
 	}
 
@@ -498,7 +532,13 @@ public:
 					restStart = timer;
 					timeLeft = restTime;
 					progress = PROGRESS::REST;
-					status = STATUS::PAUSED;
+					status = autoContinue ? status : STATUS::PAUSED;
+					restCounter -= 1;
+					if(restCounter == 0)
+					{
+						restCounter = 4;
+						timeLeft = bigRestTime;
+					}
 				}
 				
 				else if(progress == PROGRESS::REST)
@@ -507,7 +547,7 @@ public:
 					focusStart = timer;
 					timeLeft = focusTime;
 					progress = PROGRESS::FOCUS;
-					status = STATUS::PAUSED;
+					status = autoContinue ? status : STATUS::PAUSED;
 				}
 			}
 		}
@@ -518,6 +558,9 @@ public:
 			DrawString( CenterOfScreen() - olc::vi2d(ScreenWidth()/4, 40),      "P A U S E D",   olc::Pixel(255, 255, 255, 64) , 4);			
 			DrawString( CenterOfScreen() - olc::vi2d(ScreenWidth()/4 + 20, -40),"PRESS 'SPACE'", olc::Pixel(255, 255, 255, 64) , 4);			
 			DrawString(olc::vi2d(ScreenWidth() - 195, ScreenHeight() - 12), "Press 'TAB' for commands", olc::WHITE, 1);
+			std::string sAutoContinue = "Auto Continue: ";
+			sAutoContinue += (autoContinue ? "On" : "Off");
+			DrawString(olc::vi2d(2, ScreenHeight() - 12), sAutoContinue, autoContinue ? olc::GREEN : olc::RED, 1);
 		}
 
 		if(status == STATUS::RESET)
