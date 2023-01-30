@@ -231,7 +231,7 @@ std::string ToString(PROGRESS pg)
 
 std::string ToString(TYPE pg)
 {
-	if      (pg == TYPE::WORK)  return "WORK";
+	if      (pg == TYPE::WORK)  return "WORK!";
 	else if (pg == TYPE::STUDY) return "STUDY";
 	else                            return "";
 }
@@ -263,6 +263,7 @@ public:
 	std::vector<Time> marks;
 
 	bool autoContinue = true;
+	bool finishedType = false;
 
 	Time totalTimeStart;
 	Time totalTimeElapsedNow;
@@ -377,6 +378,14 @@ public:
 			if(!soundStartingRest.LoadAudioWaveform("", (char*)t.ptr, t.size_bytes))
 				std::cout << "Error with sound\n";
 
+		olc::sound::synth::ModularSynth synth;
+		olc::sound::synth::modules::Oscillator osc1;
+		osc1.waveform = olc::sound::synth::modules::Oscillator::Type::Wave;
+		osc1.pWave = &soundStartingFocus;
+		osc1.frequency = 5.0 / 20000.0;
+		osc1.amplitude = 0.5;
+		osc1.parameter = 0.5;
+
 		ConsoleCaptureStdOut(true);
 		Help();
 		VerifyTimerToday();
@@ -479,7 +488,7 @@ public:
 		}
 		else if(c1 == "skip")
 		{
-			timeLeft.seconds = 0;
+			timeLeft = Time(0);
 		}
 		else if(c1 == "auto")
 		{
@@ -498,7 +507,7 @@ public:
 		return true;
 	}
 
-	bool OnUserUpdate(float fElapsedTime) override
+	bool OnUserUpdate(float fElapsedTime) override  
 	{
 		timer.SetTime(time(0));
 		OnDraw(fElapsedTime);
@@ -512,7 +521,8 @@ public:
 		{
 			Time progressStart = progress == PROGRESS::FOCUS ? focusStart : restStart;
 
-			DrawString(CenterOfScreen() - olc::vi2d(ScreenWidth()/4 + radius - 40, radius + 40), ToString(progress) + " " + ToString(type), olc::WHITE, 4);
+			DrawString(CenterOfScreen() - olc::vi2d(ScreenWidth()/4 + radius - 40, radius + 40), ToString(progress), olc::WHITE, 4);
+			DrawString(CenterOfScreen() - olc::vi2d(-ScreenWidth()/4 + 100, radius + 40), ToString(type),     (type == TYPE::WORK) ? olc::GREY : olc::DARK_GREEN, 4);
 
 			timeLeft      -= (timer - totalTimeElapsedNow);
 			totalTime     += (timer - totalTimeElapsedNow);
@@ -558,6 +568,8 @@ public:
 			DrawString( CenterOfScreen() - olc::vi2d(ScreenWidth()/4, 40),      "P A U S E D",   olc::Pixel(255, 255, 255, 64) , 4);			
 			DrawString( CenterOfScreen() - olc::vi2d(ScreenWidth()/4 + 20, -40),"PRESS 'SPACE'", olc::Pixel(255, 255, 255, 64) , 4);			
 			DrawString(olc::vi2d(ScreenWidth() - 195, ScreenHeight() - 12), "Press 'TAB' for commands", olc::WHITE, 1);
+			DrawString(olc::vi2d(150, ScreenHeight() - 12), "Big Rest: " + std::to_string(restCounter), olc::Pixel(40 * restCounter, 255 - (20 * restCounter), 20 * restCounter), 1);
+			
 			std::string sAutoContinue = "Auto Continue: ";
 			sAutoContinue += (autoContinue ? "On" : "Off");
 			DrawString(olc::vi2d(2, ScreenHeight() - 12), sAutoContinue, autoContinue ? olc::GREEN : olc::RED, 1);
@@ -573,7 +585,7 @@ public:
 			olc::Pixel notSelectedColor = olc::Pixel(255, 255, 255, 64);
 			olc::Pixel workColor  = (type == TYPE::WORK) ? selectedColor : notSelectedColor;
 			olc::Pixel studyColor = (type == TYPE::STUDY) ? selectedColor : notSelectedColor;
-			DrawString( CenterOfScreen() - olc::vi2d(ScreenWidth()/4 + 80, 160), "1.WORK",  workColor, 4);			
+			DrawString( CenterOfScreen() - olc::vi2d(ScreenWidth()/4 + 80, 160),  "1.WORK",  workColor, 4);			
 			DrawString( CenterOfScreen() - olc::vi2d(ScreenWidth()/4 - 200, 160), "2.STUDY", studyColor, 4);			
 		}
 
