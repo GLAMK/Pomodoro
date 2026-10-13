@@ -32,11 +32,7 @@ public:
 	HMODULE GCM()
 	{
 		HMODULE hModule = NULL;
-		GetModuleHandleEx(
-			GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-			nullptr,
-			&hModule);
-
+		GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, nullptr, &hModule);
 		return hModule;
 	}
 
@@ -53,7 +49,7 @@ public:
 	}
 };
 
-auto& GetFile(int NAME, int CLASS) {
+auto GetFile(int NAME, int CLASS) {
 	Resource very_important(NAME, CLASS);
 	return very_important.GetResource();
 }
@@ -224,14 +220,14 @@ enum class TYPE
 
 std::string ToString(PROGRESS pg)
 {
-	if      (pg == PROGRESS::FOCUS) return "FOCUS";
-	else if (pg == PROGRESS::REST)  return "REST!";
-	else                            return "";
+	if      (pg == PROGRESS::FOCUS) return "FOCUS...";
+	else if (pg == PROGRESS::REST)  return "REST :)";
+	else                            return "ERROR";
 }
 
 std::string ToString(TYPE pg)
 {
-	if      (pg == TYPE::WORK)  return "WORK!";
+	if      (pg == TYPE::WORK)  return "WORK";
 	else if (pg == TYPE::STUDY) return "STUDY";
 	else                            return "";
 }
@@ -351,11 +347,12 @@ private:
 	void Help()
 	{
 		std::cout << "|================================================|\n";
-		std::cout << "|write 'H' or 'HELP' for command list            |\n";
+        std::cout << "|      Write 'H' or 'HELP' for command list      |\n";
+        std::cout << "|                                                |\n";
 		std::cout << "|For changing 'FOCUS' and 'REST' time use:       |\n";
-		std::cout << "|> set [focus][rest] [time] [s][m][h]            |\n";
+		std::cout << "|$> set [focus][rest] [time] [s][m][h]           |\n";
 		std::cout << "|Exemple:                                        |\n";
-		std::cout << "|> set rest 10 m                                 |\n";
+		std::cout << "|$> set rest 10 m                                |\n";
 		std::cout << "|                                                |\n";
 		std::cout << "|For skip a period use: 'skip'                   |\n";
 		std::cout << "|                                                |\n";
@@ -364,9 +361,37 @@ private:
 		std::cout << "\n";
 	}
 
+	// The PGE registers its window class with the generic IDI_APPLICATION icon,
+	// so we replace the title bar / taskbar icon with the one embedded in the .exe
+	void SetWindowIcon()
+	{
+		HWND hWnd = nullptr;
+		EnumWindows([](HWND h, LPARAM out) -> BOOL {
+			DWORD pid = 0;
+			wchar_t cls[64];
+			GetWindowThreadProcessId(h, &pid);
+			if (pid == GetCurrentProcessId() && GetClassNameW(h, cls, 64) && wcscmp(cls, L"OLC_PIXEL_GAME_ENGINE") == 0)
+			{
+				*(HWND*)out = h;
+				return FALSE;
+			}
+			return TRUE;
+		}, (LPARAM)&hWnd);
+		if (!hWnd) return;
+
+		HINSTANCE hInst = GetModuleHandleW(nullptr);
+		HICON hBig = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(IDI_APPICON), IMAGE_ICON,
+			GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), 0);
+		HICON hSmall = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(IDI_APPICON), IMAGE_ICON,
+			GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
+		if (hBig)   SendMessageW(hWnd, WM_SETICON, ICON_BIG, (LPARAM)hBig);
+		if (hSmall) SendMessageW(hWnd, WM_SETICON, ICON_SMALL, (LPARAM)hSmall);
+	}
+
 public:
 	bool OnUserCreate() override
 	{
+		SetWindowIcon();
 		soundEngine.InitialiseAudio();
 		auto t = GetFile(IDR_AUDIO1, AUDIO);
 		if(t.size_bytes > 0)
@@ -591,7 +616,7 @@ public:
 
 		return true;
 	}
-};
+    };
 
 int main()
 {

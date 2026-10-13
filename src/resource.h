@@ -5,6 +5,7 @@
 #define IDR_AUDIO1 254
 #define IDR_AUDIO2 253
 #define AUDIO     252
+#define IDI_APPICON 101
 
 // Next default values for new objects
 // 

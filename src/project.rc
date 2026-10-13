@@ -1,4 +1,6 @@
 #include "resource.h"
 
+IDI_APPICON ICON "pomodoro.ico"
+
 IDR_AUDIO1 AUDIO "notification.wav"
 IDR_AUDIO2 AUDIO "trumpets.wav"

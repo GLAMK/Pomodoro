@@ -1,37 +1,63 @@
-CXX = g++
-CXXFLAGS = -fopenmp
-LFLAGS = -lX11 -lGL -lpthread -lpng -lstdc++fs -lpulse -lpulse-simple -std=c++17 -O3 -mavx2 
-WFLAGS = -luser32 -lgdi32 -lopengl32 -lgdiplus -lShlwapi -ldwmapi -lstdc++fs -static -std=c++17 -O3 -mavx2 
+CXX = clang++
+RC = llvm-rc
 WINPATH = src
 FILE = clock
 
-all: msvc_debug run_windows
+# ---------- Windows (Clang + LLVM, MSVC ABI) ----------
+CLANG_FLAGS = -std=c++17 -O3 -mavx2 -fms-runtime-lib=static -D_CRT_SECURE_NO_WARNINGS -Wno-microsoft-cast
+CLANG_LIBS = -luser32 -lgdi32 -lopengl32 -lgdiplus -lshlwapi -ldwmapi -lwinmm
+# /SUBSYSTEM:WINDOWS hides the console; /ENTRY keeps "int main()" as entry point
+GUI_LINK = -fuse-ld=lld -Wl,/SUBSYSTEM:WINDOWS -Wl,/ENTRY:mainCRTStartup
+CONSOLE_LINK = -fuse-ld=lld -Wl,/SUBSYSTEM:CONSOLE
+
+# ---------- Linux (GCC) ----------
+LINUX_CXX = g++
+LFLAGS = -lX11 -lGL -lpthread -lpng -lstdc++fs -lpulse -lpulse-simple -std=c++17 -O3 -mavx2
+
+ifeq ($(OS),Windows_NT)
+SHELL = cmd.exe
+.SHELLFLAGS = /c
+endif
+
+all: windows run_windows
+
+bin:
+	if not exist bin mkdir bin
+
+# The .rc file embeds the icon and the .wav files into the .exe
+bin/project.res: $(WINPATH)/project.rc $(WINPATH)/resource.h $(WINPATH)/pomodoro.ico $(WINPATH)/notification.wav $(WINPATH)/trumpets.wav | bin
+	$(RC) -nologo -fo bin/project.res $(WINPATH)/project.rc
+
+windows: $(WINPATH)/$(FILE).cpp bin/project.res
+	$(CXX) $(CLANG_FLAGS) $(WINPATH)/$(FILE).cpp bin/project.res $(CLANG_LIBS) $(GUI_LINK) -o bin/$(FILE).exe
+
+windows_console: $(WINPATH)/$(FILE).cpp bin/project.res
+	$(CXX) $(CLANG_FLAGS) $(WINPATH)/$(FILE).cpp bin/project.res $(CLANG_LIBS) $(CONSOLE_LINK) -o bin/$(FILE).exe
+
+windows_debug: $(WINPATH)/$(FILE).cpp bin/project.res
+	$(CXX) -std=c++17 -O0 -g -mavx2 -fms-runtime-lib=static_dbg -D_CRT_SECURE_NO_WARNINGS $(WINPATH)/$(FILE).cpp bin/project.res $(CLANG_LIBS) $(CONSOLE_LINK) -o bin/$(FILE).exe
+
+run_windows: bin/$(FILE).exe
+	bin\$(FILE).exe
 
 linux: $(WINPATH)/$(FILE).cpp
-	$(CXX) $(CXXFLAGS) $(WINPATH)/$(FILE).cpp $(LFLAGS) -o bin/$(FILE)
-
-msvc_release: $(WINPATH)/$(FILE).cpp
-	cl /EHsc /openmp:llvm /O2 /Ot /std:c++17 /arch:AVX2 $(WINPATH)/$(FILE).cpp /Fdbin\vc100.pdb /Fobin\ /Fabin\ /link /SUBSYSTEM:windows /ENTRY:mainCRTStartup /out:bin\$(FILE).exe /pdb:bin\
-
-msvc_debug: $(WINPATH)/$(FILE).cpp
-	cl /EHsc /openmp:llvm /Ot /std:c++17 /arch:AVX2 $(WINPATH)/$(FILE).cpp project.res /Fdbin\vc100.pdb /Fobin\ /Fabin\ /link /SUBSYSTEM:windows /ENTRY:mainCRTStartup /out:bin\$(FILE).exe /pdb:bin\
-
-msvc_debug_console: $(WINPATH)/$(FILE).cpp
-	cl /EHsc /openmp:llvm /Ot /std:c++17 /arch:AVX2 $(WINPATH)/$(FILE).cpp project.res /Fdbin\vc100.pdb /Fobin\ /Fabin\ /link /out:bin\$(FILE).exe /pdb:bin\
-
-
-windows: $(WINPATH)/$(FILE).cpp
-	$(CXX) $(CXXFLAGS) $(WINPATH)/$(FILE).cpp $(WFLAGS) -o bin/$(FILE)
+	$(LINUX_CXX) $(WINPATH)/$(FILE).cpp $(LFLAGS) -o bin/$(FILE)
 
 run: bin/$(FILE)
 	./bin/$(FILE)
 
-run_windows: bin/$(FILE).exe
-	./bin/$(FILE).exe
-
 install:
 	sudo apt-get install build-essential libglu1-mesa-dev libpng-dev libmpich12 libpulse-dev
 
+ifeq ($(OS),Windows_NT)
 clean:
-	rm ./bin
-	rm -rf *.o
+	if exist bin\$(FILE).exe del /q bin\$(FILE).exe
+	if exist bin\$(FILE).pdb del /q bin\$(FILE).pdb
+	if exist bin\$(FILE).ilk del /q bin\$(FILE).ilk
+	if exist bin\project.res del /q bin\project.res
+else
+clean:
+	rm -f bin/$(FILE) bin/project.res
+endif
+
+.PHONY: all windows windows_console windows_debug run_windows linux run install clean
